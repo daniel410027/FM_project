@@ -1,7 +1,7 @@
 # FM_project
 
 time horizon : 2000/01/01-2024/12/31 (論文從1957-2016, 考量台股市場成熟性,決定使用24年內時間資料,真實理由只是覺得湊個整數挺不錯的)
-target : 上市, 普通股(不含TDR+KY), 400th market value in 2000/01/01-2024/12/31(從1995/01/01開始撈資料避免資料截斷問題)
+target : 上市, 普通股(不含TDR+KY), 400th market value in 2000/01/01-2024/12/31(從1995/01/01開始撈資料避免資料截斷問題), 要記得撈財報發布日期
 IFRS data :
 	現金及約當現金
 	資產總額
@@ -60,3 +60,13 @@ control variable : industry, country, firm-fixed effect(???)
 p(i, t) = a + b * quality + controls + epsilon, p(i, t) = log(MB), MB = current market equity in JUNE / book equity
 rt = alpha + beta(for mkt) * MKT + beta(for smb) * SMB + beta(for umd) * UMD + epsilon (formula 10)
 後半段結果我懶得看
+
+程式流程
+encoding : 更改編碼方法，使vscode就能打開預覽器，將fnd與price做成fnd2跟price2
+merge : 資料合併，對齊，將fnd2與price2做成merge
+first_backfill : 填補缺失值，由於我就爛，所以填法有待改進，先對文字類資料groupby公司名稱往前往後回填，對數字類資料groupby公司名稱線性補值，再groupby產業代號groupmean回填，存出first_backfill
+接下來，寫新的make.py，利用database/first *backfill.csv製作出database/make.csv
+裡面只需要以下欄位 : ["證券代碼", "年月", "收盤價(元)* 月", "公司名稱", "gpoa", "roe", "cfoa", "gmar", "acc"], gpoa為"營業毛利" / "資產總額", roe為"ROE(A)-稅後", cfoa為"現金及約當現金" / "資產總額", gmar為"營業毛利" / ("營業毛利" + "營業成本"), acc為"來自營運之現金流量" / ("稅後淨利率" * ("營業毛利" + "營業成本")
+
+程式支線任務
+coverage_analyze : merge之後，分析資料覆蓋率，存出merged_data_coverage_by_ym
