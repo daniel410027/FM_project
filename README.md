@@ -72,6 +72,9 @@ first_backfill : 填補缺失值，由於我就爛，所以填法有待改進，
 
 ![1746514527462](image/README/1746514527462.png)
 
+控制產業因素(note : 非子產業)後結果
+![1746516468796](image/README/1746516468796.png)
+
 程式支線任務
 coverage_analyze : merge之後，分析資料覆蓋率，存出merged_data_coverage_by_ym
 industry_analyze : 分析make資料產業分類
