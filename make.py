@@ -1,43 +1,4 @@
-def create_financial_ratios(df):
-    """
-    Create financial ratios from the backfilled data.
-    
-    Args:
-        df (pd.DataFrame): Input dataframe with backfilled values
-        
-    Returns:
-        pd.DataFrame: Dataframe with calculated financial ratios
-    """
-    if df is None or df.empty:
-        return None
-    
-    # Create a copy to avoid modifying the original
-    result_df = df.copy()
-    
-    # Print available columns for debugging
-    print("Available columns in the dataset:")
-    for col in result_df.columns:
-        print(f"- {col}")
-    
-    # Check if all required columns exist
-    required_columns = [
-        "證券代碼", "年月", "收盤價(元)_月", "公司名稱", 
-        "營業毛利", "資產總額", "ROE(A)－稅後", 
-        "營業成本", "來自營運之現金流量", "稅後淨利率"
-    ]
-    
-    # Handle the '現金及約當現金' column specifically
-    cash_column = None
-    cash_column_candidates = ["現金及約當現金", "  現金及約當現金", "現金及約當現金 "]
-    for candidate in cash_column_candidates:
-        if candidate in result_df.columns:
-            cash_column = candidate
-            break
-    
-    if cash_column is None:
-        print("Warning: Could not find '現金及約當現金' column. Will use an alternative method.")
-        # Use available 'Cash' related column or create a synthetic one
-        #!/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -123,11 +84,46 @@ def create_financial_ratios(df):
     denominator = denominator.replace(0, np.nan)
     result_df['acc'] = result_df['來自營運之現金流量'] / denominator
     
+    # Calculate return (rtn) based on next month's closing price
+    print("Calculating returns...")
+    # Sort by company and date
+    result_df = result_df.sort_values(['證券代碼', '年月'])
+    
+    # Calculate returns for each company
+    result_df['rtn'] = np.nan  # Initialize with NaN
+    
+    # Group by company and calculate returns
+    for company_id in result_df['證券代碼'].unique():
+        company_data = result_df[result_df['證券代碼'] == company_id].copy()
+        
+        # 確保年月是數值型態並按照年月排序
+        company_data = company_data.sort_values('年月')
+        
+        # Shift closing price to get next month's price
+        company_data['next_price'] = company_data['收盤價(元)_月'].shift(-1)
+        
+        # Calculate return
+        company_data['rtn'] = (company_data['next_price'] - company_data['收盤價(元)_月']) / company_data['收盤價(元)_月']
+        
+        # Update the main dataframe
+        result_df.loc[result_df['證券代碼'] == company_id, 'rtn'] = company_data['rtn']
+        
+    # 確保最後一個月份的資料 rtn 為 NaN
+    for company_id in result_df['證券代碼'].unique():
+        company_mask = result_df['證券代碼'] == company_id
+        # 找出該公司的最大年月值
+        max_year_month = result_df.loc[company_mask, '年月'].max()
+        # 將該公司最大年月的 rtn 設為 NaN
+        max_month_mask = company_mask & (result_df['年月'] == max_year_month)
+        result_df.loc[max_month_mask, 'rtn'] = np.nan
+    
     # Replace infinite values with NaN
     result_df.replace([np.inf, -np.inf], np.nan, inplace=True)
     
     # Select only the required columns
-    required_output_columns = ["證券代碼", "年月", "收盤價(元)_月", "公司名稱", "gpoa", "roe", "cfoa", "gmar", "acc"]
+    required_output_columns = ["證券代碼", "年月", "收盤價(元)_月", "公司名稱", 
+                          "TEJ產業_代碼",  # Industry code
+                          "gpoa", "roe", "cfoa", "gmar", "acc", "rtn"]  # Added rtn
     final_df = result_df[required_output_columns].copy()
     
     # Check for any remaining NaN values in calculated ratios
@@ -137,14 +133,14 @@ def create_financial_ratios(df):
     # Fill any remaining NaN values in calculated ratios with median values by company
     for company_id in final_df['證券代碼'].unique():
         company_mask = final_df['證券代碼'] == company_id
-        for ratio in ['gpoa', 'roe', 'cfoa', 'gmar', 'acc']:
+        for ratio in ['gpoa', 'roe', 'cfoa', 'gmar', 'acc']:  # Added rtn
             company_median = final_df.loc[company_mask, ratio].median()
             if not pd.isna(company_median):
                 missing_mask = company_mask & final_df[ratio].isna()
                 final_df.loc[missing_mask, ratio] = company_median
     
     # For any remaining NaN values, use global median
-    for ratio in ['gpoa', 'roe', 'cfoa', 'gmar', 'acc']:
+    for ratio in ['gpoa', 'roe', 'cfoa', 'gmar', 'acc']:  # Added rtn
         global_median = final_df[ratio].median()
         final_df[ratio] = final_df[ratio].fillna(global_median)
     
@@ -200,7 +196,7 @@ def run_make_process(input_file='database/first_backfill.csv', output_file='data
             print(f"Total rows: {len(processed_df)}")
             
             # Print summary statistics for the ratio columns
-            ratio_cols = ['gpoa', 'roe', 'cfoa', 'gmar', 'acc']
+            ratio_cols = ['gpoa', 'roe', 'cfoa', 'gmar', 'acc', 'rtn']  # Added rtn
             print("\nSummary statistics for financial ratios:")
             print(processed_df[ratio_cols].describe().round(4))
             
