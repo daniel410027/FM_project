@@ -65,7 +65,7 @@ rt = alpha + beta(for mkt) * MKT + beta(for smb) * SMB + beta(for umd) * UMD + e
 encoding : 更改編碼方法，使vscode就能打開預覽器，將fnd與price做成fnd2跟price2
 merge : 資料合併，對齊，將fnd2與price2做成merge
 first_backfill : 填補缺失值，由於我就爛，所以填法有待改進，先對文字類資料groupby公司名稱往前往後回填，對數字類資料groupby公司名稱線性補值，再groupby產業代號groupmean回填，存出first_backfill
-接下來，寫新的make.py，利用database/first *backfill.csv製作出database/make.csv
+接下來，寫新的make.py，利用database/first_backfill.csv製作出database/make.csv
 裡面只需要以下欄位 : ["證券代碼", "年月", "收盤價(元)* 月", "公司名稱", "gpoa", "roe", "cfoa", "gmar", "acc", "rtn"], gpoa為"營業毛利" / "資產總額", roe為"ROE(A)-稅後", cfoa為"現金及約當現金" / "資產總額", gmar為"營業毛利" / ("營業毛利" + "營業成本"), acc為"來自營運之現金流量" / ("稅後淨利率" * ("營業毛利" + "營業成本"))
 接下來，寫sort.py，對不同的"年月"的["gpoa", "roe", "cfoa", "gmar", "acc"]標準化，製作新的欄位"score"為那五個分數加總，然後對不同"年月"依照分數分成10組，之後要看這十組的rtn的summary，還有差別，還有H-L跟t-statistic
 存出 : sort.csv, group_stats.csv, hl_summary.csv, hl_returns.csv，不過跟論文不同的是我的第一組是最高分的
@@ -101,3 +101,9 @@ M19: 7 家公司
 M18: 5 家公司
 M30: 3 家公司
 M31: 1 家公司
+
+
+以下為5/14之後更新
+利用database/first_backfill.csv製作出database/make2.csv 裡面只需要以下欄位 : ["證券代碼", "年月", ""收盤價(元) 月", "公司名稱", "gpoa", "roe", "cfoa", "gmar", "acc", "delta of gpoa", "delta of roe", "delta of cfoa", "delta of gmar", "rtn"], gpoa為"營業毛利" / "資產總額", roe為"ROE(A)-稅後", cfoa為"現金及約當現金" / "資產總額", gmar為"營業毛利" / ("營業毛利" + "營業成本"), acc為"營業毛利"-"來自營運之現金流量"，delta of x為那隻證券代碼的x與延遲六十筆資料之前的x相比的成長率
+接下來，寫sort2.py，對不同的"年月"的["gpoa", "roe", "cfoa", "gmar", "acc"]標準化，製作新的欄位"profitability"為那五個分數加總，對不同"年月"的['delta of gpoa', 'delta of roe', 'delta of cfoa', 'delta of gmar', 'delta of acc']標準化，製作新的欄位"growth"為那五個分數加總，然後對不同"年月"依照分數分成10組，之後要看這十組的rtn的summary，還有差別，還有H-L跟t-statistic
+因為資料有delta，所以統計時只要"年月">200000的資料就好(年月格式為yyyymm的六位數字)
