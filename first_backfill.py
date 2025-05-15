@@ -65,7 +65,7 @@ def backfill_financial_data(df):
         '現金及約當現金', '資產總額', '負債總額', '股東權益總額', 
         '營業毛利', 'ROA(A)稅後息前', 'ROE(A)－稅後', '每股盈餘', 
         '來自營運之現金流量', '營運槓桿度', '財務槓桿度', 
-        '稅後淨利率', '營業成本'
+        '稅後淨利率', '營業成本', 'CAPM_Beta 一年'
     ]
     
     # Map the fill methods - adjust these based on financial domain knowledge
