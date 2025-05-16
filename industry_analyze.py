@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
-Test Script
+修改版腳本
 ----------
-This script reads the processed financial data and creates a pie chart
-of the TEJ產業_代碼 (TEJ Industry Code) distribution, categorized by the first 3 characters.
+本腳本讀取處理過的財務數據並創建以下內容：
+1. 基於TEJ產業代碼前三碼的分布圓餅圖
+2. 基於TEJ產業代碼前三碼的分布圓餅圖，但針對M23類別使用前四碼進行細分
+所有圓餅圖都會被保存到指定目錄。
 """
 
 import pandas as pd
@@ -16,148 +18,173 @@ import matplotlib as mpl
 
 def load_processed_data(file_path='database/make.csv'):
     """
-    Load the processed CSV data with financial ratios.
+    載入處理過的CSV財務數據。
     
     Args:
-        file_path (str): Path to the processed CSV file
+        file_path (str): 處理後CSV文件的路徑
         
     Returns:
-        pd.DataFrame: Loaded dataframe
+        pd.DataFrame: 載入的數據框
     """
     try:
         df = pd.read_csv(file_path, encoding='utf-8')
-        print(f"Loaded processed data shape: {df.shape}")
+        print(f"載入處理後數據形狀: {df.shape}")
         return df
     except Exception as e:
-        print(f"Error loading processed data: {e}")
+        print(f"載入處理後數據時出錯: {e}")
         return None
 
-def create_industry_pie_chart(df, output_dir='plots'):
+def create_industry_pie_chart(df, output_dir='plots', special_treatment=False):
     """
-    Create a pie chart showing the distribution of TEJ產業_代碼,
-    grouped by the first 3 characters of each code.
+    創建顯示TEJ產業代碼分布的圓餅圖，
+    基於每個代碼的前三個字符分組。
     
     Args:
-        df (pd.DataFrame): Input dataframe with TEJ產業_代碼
-        output_dir (str): Directory to save the output plot
+        df (pd.DataFrame): 包含TEJ產業_代碼的輸入數據框
+        output_dir (str): 保存輸出圖表的目錄
+        special_treatment (bool): 如果為True，則對M23類別使用四碼分類
         
     Returns:
-        bool: Success status
+        bool: 成功狀態
     """
     if df is None or df.empty or 'TEJ產業_代碼' not in df.columns:
-        print("Error: DataFrame is empty or missing 'TEJ產業_代碼' column")
+        print("錯誤: 數據框為空或缺少'TEJ產業_代碼'列")
         return False
     
-    # Configure matplotlib for Chinese characters
+    # 配置matplotlib以支持中文字符
     plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun', 'Arial Unicode MS']
     plt.rcParams['axes.unicode_minus'] = False
     
-    # Extract the first 3 characters for categorization
+    # 提取最新日期的數據
     latest_date = df['年月'].max()
     latest_df = df[df['年月'] == latest_date].copy()
     
-    # Create new column with first 3 chars of industry code
-    latest_df['產業分類'] = latest_df['TEJ產業_代碼'].astype(str).apply(lambda x: x[:3] if len(str(x)) >= 3 else x)
+    if special_treatment:
+        # 創建新列，對M23使用前四碼，其他使用前三碼
+        latest_df['產業分類'] = latest_df['TEJ產業_代碼'].astype(str).apply(
+            lambda x: x[:4] if (len(str(x)) >= 4 and str(x).startswith('M23')) else x[:3] if len(str(x)) >= 3 else x
+        )
+        filename_suffix = 'special_m23'
+        title_suffix = '(M23使用四碼分類)'
+    else:
+        # 創建新列，統一使用前三碼
+        latest_df['產業分類'] = latest_df['TEJ產業_代碼'].astype(str).apply(
+            lambda x: x[:3] if len(str(x)) >= 3 else x
+        )
+        filename_suffix = 'standard'
+        title_suffix = '(標準三碼分類)'
     
-    # Count by industry group
+    # 按產業組計數
     industry_counts = latest_df['產業分類'].value_counts()
     
-    # If there are too many categories, combine the smaller ones
-    if len(industry_counts) > 10:
-        # Keep top 9 industries, group the rest as "Other"
-        top_industries = industry_counts.nlargest(9)
-        other_count = industry_counts[9:].sum()
-        
-        # Create a new Series with "Other" category
-        other_series = pd.Series({'其他': other_count})
-        industry_counts = pd.concat([top_industries, other_series])
+    # 創建更大尺寸的圖形以提高可讀性
+    plt.figure(figsize=(14, 10))
     
-    # Create figure with larger size for better readability
-    plt.figure(figsize=(12, 8))
-    
-    # Create a pie chart
+    # 創建圓餅圖
     wedges, texts, autotexts = plt.pie(
         industry_counts, 
         labels=industry_counts.index,
-        autopct='%1.1f%%',  # Show percentage with 1 decimal place
+        autopct='%1.1f%%',  # 顯示1位小數的百分比
         startangle=90,
-        shadow=True,
-        explode=[0.05] * len(industry_counts),  # Slightly explode all slices
+        shadow=False,  # 移除陰影效果
+        explode=[0.05] * len(industry_counts),  # 略微分離所有切片
+        pctdistance=0.6,  # 將百分比標籤移近圓心
+        labeldistance=1.1,  # 將標籤移遠一點
     )
     
-    # Set font properties for better Chinese character display
-    for text in texts + autotexts:
-        text.set_fontsize(12)
+    # 設置字體屬性以更好地顯示中文字符
+    for text in texts:
+        text.set_fontsize(11)
     
-    # Equal aspect ratio ensures that pie is drawn as a circle
+    # 設置百分比標籤的屬性
+    for autotext in autotexts:
+        autotext.set_fontsize(10)
+        autotext.set_weight('bold')
+    
+    # 使用調整函數來避免標籤重疊
+    plt.tight_layout()
+    
+    # 相等的縱橫比確保餅圖呈現為圓形
     plt.axis('equal')
     
-    # Add title with appropriate font for Chinese characters
-    plt.title('TEJ產業代碼分布 (前三碼分類)', fontsize=16)
+    # 添加標題，並使用適合中文字符的字體
+    plt.title(f'TEJ產業代碼分布 {title_suffix}', fontsize=16)
     
-    # Create directory if it doesn't exist
+    # 如果目錄不存在則創建
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     
-    # Save the figure
-    output_path = f"{output_dir}/industry_distribution_pie.png"
+    # 保存圖片
+    output_path = f"{output_dir}/industry_distribution_pie_{filename_suffix}.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     
-    # Show the plot
+    # 顯示圖表
     plt.tight_layout()
-    plt.show()
+    plt.close()  # 關閉圖表以避免顯示
     
-    print(f"Pie chart saved to {output_path}")
+    print(f"圓餅圖已保存到 {output_path}")
     
-    # Also print the distribution table
-    print("\n產業分布統計表 (前三碼分類):")
+    # 同時打印分布表
+    print(f"\n產業分布統計表 {title_suffix}:")
     industry_table = pd.DataFrame({
-        '產業前三碼': industry_counts.index,
+        '產業代碼': industry_counts.index,
         '公司數量': industry_counts.values,
         '占比 (%)': (industry_counts.values / industry_counts.sum() * 100).round(2)
     })
     print(industry_table.to_string(index=False))
     
-    return True
+    return industry_table
 
-def run_test():
+def run_test(file_path='database/make.csv'):
     """
-    Run the complete test process.
+    運行完整的測試流程。
     
+    Args:
+        file_path (str): 輸入文件路徑
+        
     Returns:
-        bool: Success status
+        bool: 成功狀態
     """
-    print("Starting test process")
+    print("開始測試流程")
     
-    # Load processed data
-    processed_df = load_processed_data()
+    # 載入處理後的數據
+    processed_df = load_processed_data(file_path)
     
     if processed_df is not None:
-        # Check if TEJ產業_代碼 column exists
+        # 檢查TEJ產業_代碼列是否存在
         if 'TEJ產業_代碼' not in processed_df.columns:
-            print("Error: 'TEJ產業_代碼' column not found in processed data")
-            # Print available columns for debugging
-            print("Available columns:", processed_df.columns.tolist())
+            print("錯誤: 處理後的數據中未找到'TEJ產業_代碼'列")
+            # 打印可用列以便調試
+            print("可用列:", processed_df.columns.tolist())
             return False
         
-        # Create industry pie chart
-        success = create_industry_pie_chart(processed_df)
+        # 創建兩個版本的產業圓餅圖
+        print("\n創建標準版本的產業圓餅圖 (三碼分類)")
+        standard_table = create_industry_pie_chart(processed_df, special_treatment=False)
         
-        # Print additional statistics
-        if success:
-            # Create a new column for the first 3 characters
-            processed_df['產業前三碼'] = processed_df['TEJ產業_代碼'].astype(str).apply(
-                lambda x: x[:3] if len(str(x)) >= 3 else x
-            )
+        print("\n創建特殊版本的產業圓餅圖 (M23使用四碼分類)")
+        special_table = create_industry_pie_chart(processed_df, special_treatment=True)
+        
+        # 打印附加統計信息
+        if standard_table is not None and special_table is not None:
+            # 標準分類的獨特產業類別數
+            standard_categories = len(standard_table)
+            print(f"\n標準三碼分類總共有 {standard_categories} 個不同的產業類別")
             
-            # Number of unique industry categories
-            unique_industries = processed_df['產業前三碼'].nunique()
-            print(f"\n總共有 {unique_industries} 個不同的產業類別 (前三碼分類)")
+            # 特殊分類的獨特產業類別數
+            special_categories = len(special_table)
+            print(f"\n使用M23四碼分類總共有 {special_categories} 個不同的產業類別")
             
-            # Analyze company count by industry
-            industry_company_counts = processed_df.groupby('產業前三碼')['證券代碼'].nunique().sort_values(ascending=False)
-            print("\n各產業公司數量 (由高至低):")
-            for industry, count in industry_company_counts.items():
-                print(f"- {industry}: {count} 家公司")
+            # 分析M23類別的改進
+            if 'M23' in standard_table['產業代碼'].values:
+                m23_standard = standard_table[standard_table['產業代碼'] == 'M23']['公司數量'].iloc[0]
+                print(f"\nM23在標準分類中包含 {m23_standard} 家公司")
+                
+                # 計算M23在特殊分類中的細分類別
+                m23_subcategories = special_table[special_table['產業代碼'].str.startswith('M23')]
+                if not m23_subcategories.empty:
+                    print(f"M23在特殊分類中細分為 {len(m23_subcategories)} 個子類別:")
+                    for _, row in m23_subcategories.iterrows():
+                        print(f"- {row['產業代碼']}: {row['公司數量']} 家公司 ({row['占比 (%)']}%)")
             
             return True
         
@@ -166,13 +193,13 @@ def run_test():
 if __name__ == "__main__":
     import sys
     
-    # Allow custom input file path as command-line argument
+    # 允許通過命令行參數自定義輸入文件路徑
     if len(sys.argv) > 1:
         success = run_test(sys.argv[1])
     else:
         success = run_test()
     
     if success:
-        print("Test process completed successfully!")
+        print("測試流程成功完成!")
     else:
-        print("Test process failed.")
+        print("測試流程失敗。")

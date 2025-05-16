@@ -137,3 +137,5 @@ safety = z(Zbab + Zlev + Zo + Zz + Zevol) (formula 4)
 調整因子權重：根據相關性給予不同權重
 處理極端值：使用 Winsorize 方法
 修正日期轉換錯誤
+
+5/16
