@@ -139,3 +139,4 @@ safety = z(Zbab + Zlev + Zo + Zz + Zevol) (formula 4)
 修正日期轉換錯誤
 
 5/16
+支線任務 : 製作公司分布圓餅圖
