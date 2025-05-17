@@ -104,7 +104,6 @@ M18: 5 家公司
 M30: 3 家公司
 M31: 1 家公司
 
-
 5/14更新
 利用database/first_backfill.csv製作出database/make2.csv 裡面只需要以下欄位 : ["證券代碼", "年月", ""收盤價(元) 月", "公司名稱", "gpoa", "roe", "cfoa", "gmar", "acc", "delta of gpoa", "delta of roe", "delta of cfoa", "delta of gmar", "rtn"], gpoa為"營業毛利" / "資產總額", roe為"ROE(A)-稅後", cfoa為"現金及約當現金" / "資產總額", gmar為"營業毛利" / ("營業毛利" + "營業成本"), acc為"營業毛利"-"來自營運之現金流量"，delta of x為那隻證券代碼的x與延遲六十筆資料之前的x相比的成長率
 接下來，寫sort2.py，對不同的"年月"的["gpoa", "roe", "cfoa", "gmar", "acc"]標準化，製作新的欄位"profitability"為那五個分數加總，對不同"年月"的['delta of gpoa', 'delta of roe', 'delta of cfoa', 'delta of gmar', 'delta of acc']標準化，製作新的欄位"growth"為那五個分數加總，然後對不同"年月"依照分數分成10組，之後要看這十組的rtn的summary，還有差別，還有H-L跟t-statistic
