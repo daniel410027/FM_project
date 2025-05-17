@@ -2,307 +2,252 @@
 # -*- coding: utf-8 -*-
 
 """
-Safety Indicator Analysis Test Script
------------------------------------
-This script performs detailed analysis on safety indicators to diagnose issues.
+測試安全指標的反向設定
+-----------
+此腳本測試安全指標 (bab, lev, o, z, evol) 原始值和反向值與股票報酬率的相關性，
+以確定哪些指標應該被反向處理。
 """
 
 import pandas as pd
 import numpy as np
+from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy import stats
-from pathlib import Path
 
 
-def load_data():
-    """Load make3 and sort3 data for analysis."""
+def load_data(file_path='database/make4.csv'):
+    """載入財務資料"""
     try:
-        make_df = pd.read_csv('database/make3.csv', encoding='utf-8')
-        sort_df = pd.read_csv('database/sort3.csv', encoding='utf-8')
-        print(f"Loaded make3 data: {make_df.shape}")
-        print(f"Loaded sort3 data: {sort_df.shape}")
-        return make_df, sort_df
+        df = pd.read_csv(file_path, encoding='utf-8')
+        print(f"載入財務資料，形狀：{df.shape}")
+        
+        # 過濾數據以僅包含 200600 之後的數據
+        df_filtered = df[df['年月'] > 200600].copy()
+        print(f"過濾後資料形狀（年月 > 200600）：{df_filtered.shape}")
+        
+        return df_filtered
     except Exception as e:
-        print(f"Error loading data: {e}")
+        print(f"載入財務資料時發生錯誤：{e}")
+        return None
+
+
+def test_safety_indicators_correlation(df):
+    """測試安全指標與報酬的相關性，比較原始值和反向值"""
+    if df is None or df.empty:
         return None, None
-
-
-def analyze_safety_components(make_df, sort_df):
-    """Analyze individual safety components."""
-    print("\n=== SAFETY COMPONENT ANALYSIS ===")
     
+    # 安全指標列
     safety_cols = ['bab', 'lev', 'o', 'z', 'evol']
-    standardized_cols = ['z_bab', 'z_lev', 'z_o', 'z_z', 'z_evol']
     
-    # 1. Basic statistics for raw safety indicators
-    print("\n1. Raw Safety Indicators Statistics:")
-    raw_stats = make_df[safety_cols + ['rtn']].describe()
-    print(raw_stats.round(4))
+    # 檢查是否所有必要的列都存在
+    required_columns = safety_cols + ["rtn"]
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        print(f"錯誤：缺少必要的列：{missing_columns}")
+        return None, None
     
-    # 2. Correlation with returns (raw values)
-    print("\n2. Raw Safety Indicators Correlation with Returns:")
-    raw_corr = make_df[safety_cols + ['rtn']].corr()['rtn'].drop('rtn')
-    print(raw_corr.round(4))
+    # 建立每個安全指標的原始值和反向值
+    results = []
+    correlation_plots = {}
     
-    # 3. Standardized values correlation
-    if all(col in sort_df.columns for col in standardized_cols):
-        print("\n3. Standardized Safety Indicators Correlation with Returns:")
-        std_corr = sort_df[standardized_cols + ['rtn']].corr()['rtn'].drop('rtn')
-        print(std_corr.round(4))
-    
-    # 4. Check if reversals are working correctly
-    print("\n4. Safety Score Components Analysis:")
-    if 'safety' in sort_df.columns:
-        # Calculate correlation of individual components with final safety score
-        safety_components = []
-        for col in standardized_cols:
-            if col in sort_df.columns:
-                component_corr = sort_df[[col, 'safety']].corr().iloc[0, 1]
-                safety_components.append((col, component_corr))
-        
-        print("Component correlation with safety score:")
-        for comp, corr in safety_components:
-            print(f"  {comp}: {corr:.4f}")
-    
-    # 5. Distribution analysis
-    print("\n5. Distribution Analysis:")
     for col in safety_cols:
-        if col in make_df.columns:
-            skew = make_df[col].skew()
-            kurt = make_df[col].kurtosis()
-            print(f"{col}: Skewness={skew:.4f}, Kurtosis={kurt:.4f}")
-
-
-def analyze_period_effects(sort_df):
-    """Analyze safety indicators over time periods."""
-    print("\n=== PERIOD EFFECTS ANALYSIS ===")
-    
-    if 'safety' not in sort_df.columns:
-        print("Safety column not found")
-        return
-    
-    # Convert 年月 to datetime for better analysis
-    sort_df['year'] = sort_df['年月'] // 100
-    sort_df['month'] = sort_df['年月'] % 100
-    
-    # 1. Safety score by year
-    print("\n1. Average Safety Score by Year:")
-    yearly_safety = sort_df.groupby('year')['safety'].agg(['mean', 'std', 'count'])
-    print(yearly_safety.tail(10).round(4))
-    
-    # 2. Safety vs Returns by year
-    print("\n2. Safety-Return Correlation by Year:")
-    yearly_corr = sort_df.groupby('year')[['safety', 'rtn']].corr().iloc[::2, -1]
-    yearly_corr.index = yearly_corr.index.get_level_values(0)
-    print(yearly_corr.tail(10).round(4))
-    
-    # 3. Component behavior over time
-    print("\n3. Safety Components Over Time (Standardized):")
-    standardized_cols = ['z_bab', 'z_lev', 'z_o', 'z_z', 'z_evol']
-    available_cols = [col for col in standardized_cols if col in sort_df.columns]
-    
-    if available_cols:
-        component_yearly = sort_df.groupby('year')[available_cols].mean()
-        print(component_yearly.tail(5).round(4))
-
-
-def test_reversal_logic(sort_df):
-    """Test if the reversal logic is working correctly."""
-    print("\n=== REVERSAL LOGIC TEST ===")
-    
-    # Check if reversed indicators have opposite signs
-    reverse_mapping = {
-        'z_o': True,    # Should be reversed
-        'z_evol': True  # Should be reversed
-    }
-    
-    print("\n1. Testing Reversal Implementation:")
-    for col, should_reverse in reverse_mapping.items():
-        if col in sort_df.columns and 'safety' in sort_df.columns:
-            # Create temporary safety score with and without this component
-            other_cols = ['z_bab', 'z_lev', 'z_z']
-            other_cols = [c for c in other_cols if c in sort_df.columns and c != col]
-            
-            if other_cols:
-                temp_safety_without = sort_df[other_cols].sum(axis=1)
-                temp_safety_with = temp_safety_without + sort_df[col]
-                temp_safety_with_reversed = temp_safety_without - sort_df[col]
-                
-                # Check correlation
-                corr_without_reversal = temp_safety_with.corr(sort_df['rtn'])
-                corr_with_reversal = temp_safety_with_reversed.corr(sort_df['rtn'])
-                
-                print(f"\n{col}:")
-                print(f"  Correlation without reversal: {corr_without_reversal:.4f}")
-                print(f"  Correlation with reversal: {corr_with_reversal:.4f}")
-                print(f"  Should reverse: {should_reverse}")
-                print(f"  Reversal improves correlation: {corr_with_reversal > corr_without_reversal}")
-
-
-def analyze_by_industry(sort_df):
-    """Analyze safety indicators by industry."""
-    print("\n=== INDUSTRY ANALYSIS ===")
-    
-    if 'TEJ產業_代碼' not in sort_df.columns:
-        print("Industry code not found")
-        return
-    
-    # Extract industry code
-    sort_df['industry'] = sort_df['TEJ產業_代碼'].astype(str).str[:3]
-    
-    # 1. Safety effectiveness by industry
-    print("\n1. Safety-Return Correlation by Industry:")
-    industry_corr = sort_df.groupby('industry').apply(
-        lambda x: x[['safety', 'rtn']].corr().iloc[0, 1] if len(x) > 30 else np.nan
-    )
-    industry_corr = industry_corr.dropna().sort_values(ascending=False)
-    print(industry_corr.head(10).round(4))
-    print("...")
-    print(industry_corr.tail(10).round(4))
-    
-    # 2. Average safety score by industry
-    print("\n2. Average Safety Score by Industry:")
-    industry_safety = sort_df.groupby('industry')['safety'].agg(['mean', 'count'])
-    industry_safety = industry_safety[industry_safety['count'] > 100].sort_values('mean', ascending=False)
-    print(industry_safety.head(10).round(4))
-
-
-def suggest_improvements(make_df, sort_df):
-    """Suggest improvements based on analysis."""
-    print("\n=== IMPROVEMENT SUGGESTIONS ===")
-    
-    # Analyze each component
-    suggestions = []
-    
-    # 1. Check correlations
-    safety_cols = ['bab', 'lev', 'o', 'z', 'evol']
-    raw_corr = make_df[safety_cols + ['rtn']].corr()['rtn'].drop('rtn')
-    
-    print("\n1. Component-wise Suggestions:")
-    for col, corr in raw_corr.items():
-        if col == 'bab':
-            if corr < 0:
-                suggestions.append(f"Consider NOT reversing {col} (currently negative correlation)")
-        elif col == 'lev':
-            if corr < 0:
-                suggestions.append(f"Consider reversing {col} (negative correlation)")
-        elif col == 'o':
-            if corr > 0:
-                suggestions.append(f"Confirm {col} is properly reversed (positive correlation)")
-        elif col == 'z':
-            if corr < 0:
-                suggestions.append(f"Consider reversing {col} (negative correlation)")
-        elif col == 'evol':
-            if corr > 0:
-                suggestions.append(f"Confirm {col} is properly reversed (positive correlation)")
-    
-    for suggestion in suggestions:
-        print(f"  - {suggestion}")
-    
-    # 2. Overall safety effectiveness
-    if 'safety' in sort_df.columns:
-        safety_corr = sort_df[['safety', 'rtn']].corr().iloc[0, 1]
-        print(f"\n2. Overall Safety Score Correlation: {safety_corr:.4f}")
+        # 計算原始值的相關性
+        orig_corr = df[[col, 'rtn']].corr().iloc[0, 1]
         
-        if safety_corr < 0:
-            print("  - Safety score is negatively correlated with returns")
-            print("  - Consider removing safety from the composite score")
-            print("  - Or completely redesign the safety factor")
+        # 計算反向值的相關性（乘以-1）
+        df[f'{col}_reversed'] = -df[col]
+        reversed_corr = df[[f'{col}_reversed', 'rtn']].corr().iloc[0, 1]
+        
+        # 儲存結果
+        results.append({
+            'indicator': col,
+            'original_correlation': orig_corr,
+            'reversed_correlation': reversed_corr,
+            'better_if_reversed': abs(reversed_corr) > abs(orig_corr),
+            'recommendation': 'Reverse' if abs(reversed_corr) > abs(orig_corr) else 'Keep Original'
+        })
+        
+        # 為每個指標建立散點圖資料
+        correlation_plots[col] = {
+            'original': (df[col], df['rtn'], orig_corr),
+            'reversed': (df[f'{col}_reversed'], df['rtn'], reversed_corr)
+        }
     
-    # 3. Missing value impact
-    print("\n3. Missing Value Impact:")
-    missing_pct = sort_df[['z_bab', 'z_lev', 'z_o', 'z_z', 'z_evol']].isnull().sum() / len(sort_df) * 100
-    for col, pct in missing_pct.items():
-        if pct > 10:
-            print(f"  - {col}: {pct:.1f}% missing (consider imputation or exclusion)")
+    # 轉換為DataFrame並返回
+    results_df = pd.DataFrame(results)
+    return results_df, correlation_plots
 
 
-def create_visualizations(make_df, sort_df):
-    """Create visualizations for safety analysis."""
-    output_dir = Path('safety_analysis_plots')
-    output_dir.mkdir(exist_ok=True)
-    
-    # 1. Correlation heatmap
-    plt.figure(figsize=(10, 8))
-    safety_cols = ['bab', 'lev', 'o', 'z', 'evol', 'rtn']
-    available_cols = [col for col in safety_cols if col in make_df.columns]
-    corr_matrix = make_df[available_cols].corr()
-    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
-    plt.title('Safety Indicators Correlation Matrix')
-    plt.tight_layout()
-    plt.savefig(output_dir / 'safety_correlation_heatmap.png')
-    plt.close()
-    
-    # 2. Distribution plots
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    axes = axes.flatten()
-    
-    for i, col in enumerate(['bab', 'lev', 'o', 'z', 'evol']):
-        if col in make_df.columns and i < len(axes):
-            data = make_df[col].dropna()
-            # Winsorize extreme values for better visualization
-            lower = data.quantile(0.01)
-            upper = data.quantile(0.99)
-            data_winsorized = data.clip(lower=lower, upper=upper)
+def plot_correlations(correlation_plots, output_dir='figures'):
+    """繪製相關性散點圖"""
+    try:
+        # 建立輸出目錄（如果不存在）
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # 設定圖形風格
+        sns.set(style="whitegrid")
+        plt.figure(figsize=(15, 12))
+        
+        for i, (indicator, data) in enumerate(correlation_plots.items()):
+            # 原始值的散點圖
+            ax1 = plt.subplot(5, 2, 2*i+1)
+            x, y, corr = data['original']
+            ax1.scatter(x, y, alpha=0.3)
+            ax1.set_title(f'{indicator} vs Return (Original, corr={corr:.4f})')
+            ax1.set_xlabel(indicator)
+            ax1.set_ylabel('Return')
             
-            axes[i].hist(data_winsorized, bins=50, alpha=0.7, edgecolor='black')
-            axes[i].set_title(f'{col} Distribution (1-99 percentile)')
-            axes[i].set_xlabel(col)
-            axes[i].set_ylabel('Frequency')
-    
-    # Hide extra subplot if any
-    if len(['bab', 'lev', 'o', 'z', 'evol']) < len(axes):
-        axes[-1].set_visible(False)
-    
-    plt.tight_layout()
-    plt.savefig(output_dir / 'safety_distributions.png')
-    plt.close()
-    
-    # 3. Time series of safety score
-    if 'safety' in sort_df.columns:
-        plt.figure(figsize=(12, 6))
-        monthly_safety = sort_df.groupby('年月')['safety'].mean()
-        monthly_safety.plot()
-        plt.title('Average Safety Score Over Time')
-        plt.xlabel('Year-Month')
-        plt.ylabel('Average Safety Score')
-        plt.grid(True, alpha=0.3)
+            # 反向值的散點圖
+            ax2 = plt.subplot(5, 2, 2*i+2)
+            x, y, corr = data['reversed']
+            ax2.scatter(x, y, alpha=0.3, color='orange')
+            ax2.set_title(f'{indicator} vs Return (Reversed, corr={corr:.4f})')
+            ax2.set_xlabel(f'{indicator} (Reversed)')
+            ax2.set_ylabel('Return')
+        
         plt.tight_layout()
-        plt.savefig(output_dir / 'safety_time_series.png')
+        plt.savefig(output_path / 'safety_indicators_correlation.png', dpi=300)
         plt.close()
-    
-    print(f"\nVisualizations saved to {output_dir}")
+        
+        print(f"相關性散點圖已儲存至 {output_path / 'safety_indicators_correlation.png'}")
+    except Exception as e:
+        print(f"繪製相關性散點圖時發生錯誤：{e}")
 
 
-def generate_report(make_df, sort_df):
-    """Generate a comprehensive report."""
-    print("\n" + "="*50)
-    print("SAFETY INDICATOR ANALYSIS REPORT")
-    print("="*50)
+def calculate_standardized_scores(df):
+    """計算原始和反向標準化後的安全分數，並分析與報酬的相關性"""
+    if df is None or df.empty:
+        return None
     
-    # Run all analyses
-    analyze_safety_components(make_df, sort_df)
-    analyze_period_effects(sort_df)
-    test_reversal_logic(sort_df)
-    analyze_by_industry(sort_df)
-    suggest_improvements(make_df, sort_df)
-    create_visualizations(make_df, sort_df)
+    # 安全指標列
+    safety_cols = ['bab', 'lev', 'o', 'z', 'evol']
     
-    print("\n" + "="*50)
-    print("ANALYSIS COMPLETED")
-    print("="*50)
+    # 建立標準化後的指標
+    result_df = df.copy()
+    
+    # 為每個指標建立標準化的列
+    for col in safety_cols:
+        result_df[f'z_{col}'] = (result_df[col] - result_df[col].mean()) / result_df[col].std()
+    
+    # 測試不同的反向組合
+    combinations = []
+    
+    # 測試所有可能的反向設定（32種可能性）
+    for bab_rev in [False, True]:
+        for lev_rev in [False, True]:
+            for o_rev in [False, True]:
+                for z_rev in [False, True]:
+                    for evol_rev in [False, True]:
+                        # 建立反向設定
+                        reverse_safety = {
+                            'bab': bab_rev,
+                            'lev': lev_rev,
+                            'o': o_rev,
+                            'z': z_rev,
+                            'evol': evol_rev
+                        }
+                        
+                        # 建立安全分數
+                        safety_scores = []
+                        for col in safety_cols:
+                            if reverse_safety.get(col, False):
+                                # 反向指標：用負值
+                                safety_scores.append(-result_df[f'z_{col}'])
+                            else:
+                                safety_scores.append(result_df[f'z_{col}'])
+                        
+                        # 計算安全分數
+                        safety_score = sum(safety_scores)
+                        
+                        # 計算與報酬的相關性
+                        corr = safety_score.corr(result_df['rtn'])
+                        
+                        # 儲存結果
+                        combinations.append({
+                            'bab_rev': bab_rev,
+                            'lev_rev': lev_rev,
+                            'o_rev': o_rev,
+                            'z_rev': z_rev,
+                            'evol_rev': evol_rev,
+                            'correlation': corr
+                        })
+    
+    # 轉換為DataFrame
+    combinations_df = pd.DataFrame(combinations)
+    
+    # 根據相關性排序
+    combinations_df = combinations_df.sort_values('correlation', ascending=False)
+    
+    return combinations_df
 
 
-def main():
-    # Load data
-    make_df, sort_df = load_data()
+def run_tests(input_file='database/make4.csv'):
+    """執行所有測試"""
+    print(f"開始從 {input_file} 測試安全指標")
     
-    if make_df is not None and sort_df is not None:
-        generate_report(make_df, sort_df)
-    else:
-        print("Failed to load data. Please check file paths.")
+    # 載入資料
+    data_df = load_data(input_file)
+    
+    if data_df is not None:
+        # 測試安全指標與報酬的相關性
+        results_df, correlation_plots = test_safety_indicators_correlation(data_df)
+        
+        if results_df is not None:
+            print("\n原始與反向相關性比較:")
+            print(results_df.to_string(index=False))
+            
+            # 繪製相關性散點圖
+            plot_correlations(correlation_plots)
+            
+            # 計算標準化分數的組合
+            combinations_df = calculate_standardized_scores(data_df)
+            
+            if combinations_df is not None:
+                print("\n前10組最佳反向設定組合（按相關性排序）:")
+                print(combinations_df.head(10).to_string(index=False))
+                
+                print("\n當前程式使用的反向設定:")
+                current_setting = {
+                    'bab_rev': False,
+                    'lev_rev': True,
+                    'o_rev': False, 
+                    'z_rev': False,
+                    'evol_rev': False
+                }
+                
+                # 尋找當前設定在組合中的排名
+                current_rank = combinations_df[
+                    (combinations_df['bab_rev'] == current_setting['bab_rev']) &
+                    (combinations_df['lev_rev'] == current_setting['lev_rev']) &
+                    (combinations_df['o_rev'] == current_setting['o_rev']) &
+                    (combinations_df['z_rev'] == current_setting['z_rev']) &
+                    (combinations_df['evol_rev'] == current_setting['evol_rev'])
+                ]
+                
+                if not current_rank.empty:
+                    rank_index = combinations_df.index.get_loc(current_rank.index[0]) + 1
+                    print(f"當前設定的排名: {rank_index}/{len(combinations_df)}")
+                    print(f"當前設定的相關性: {current_rank['correlation'].values[0]:.6f}")
+                else:
+                    print("當前設定不在測試組合中")
+                
+                return True
+    
+    return False
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='測試安全指標的反向設定')
+    parser.add_argument('--input', default='database/make4.csv', help='輸入CSV檔案路徑')
+    
+    args = parser.parse_args()
+    
+    success = run_tests(args.input)
+    
+    if success:
+        print("測試完成！")
+    else:
+        print("測試失敗。")

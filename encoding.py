@@ -3,10 +3,11 @@ import os
 
 
 # 處理 fnd.csv 文件，創建 fnd2.csv
+# 5/17改版處理fnd3.csv
 def process_fnd_file():
     try:
         # 讀取原始 fnd.csv 文件
-        df = pd.read_csv("database/fnd.csv", encoding='utf-16')
+        df = pd.read_csv("database/fnd3.csv", encoding='utf-16')
         
         # 獲取第一列名稱
         col_name = df.columns[0]
