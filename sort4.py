@@ -14,7 +14,8 @@ import pandas as pd
 import numpy as np
 import scipy.stats as stats
 from pathlib import Path
-
+import warnings
+warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
 
 def load_make_data(file_path='database/make4.csv'):
     """
@@ -267,7 +268,21 @@ def analyze_returns_by_group(df):
     
     # Extract industry code (first 3 digits of TEJ產業_代碼)
     if 'TEJ產業_代碼' in analysis_df.columns:
-        analysis_df['industry_code'] = analysis_df['TEJ產業_代碼'].astype(str).str[:3]
+        # 先轉換所有代碼為字串類型
+        analysis_df['TEJ產業_代碼_str'] = analysis_df['TEJ產業_代碼'].astype(str)
+        
+        # 創建條件遮罩 (mask) 來識別M23開頭的代碼
+        is_m23 = analysis_df['TEJ產業_代碼_str'].str.startswith('M23')
+        
+        # 對M23開頭的代碼取前4位，其他取前3位
+        analysis_df['industry_code'] = np.where(
+            is_m23,
+            analysis_df['TEJ產業_代碼_str'].str[:4],  # 若為M23則取前4位
+            analysis_df['TEJ產業_代碼_str'].str[:3]   # 其他取前3位
+        )
+        
+        # 移除臨時欄位
+        analysis_df.drop('TEJ產業_代碼_str', axis=1, inplace=True)
     else:
         print("Warning: 'TEJ產業_代碼' column not found. Using placeholder industry codes.")
         analysis_df['industry_code'] = '000'  # Placeholder
